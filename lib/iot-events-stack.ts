@@ -7,24 +7,21 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID;
-
 ///* 諸々の定義 * ///
 
-// input
+// iot events input
 const inputName = 'sample_task_input';
 const inputAtts = {
   id: 'id',
   title: 'title',
   done: 'done',
-};
-const inputAttribute: cdk.aws_iotevents.CfnInput.AttributeProperty[] = Object.values(inputAtts).map(
+} as const;
+const inputAttributeProperties: cdk.aws_iotevents.CfnInput.AttributeProperty[] = Object.values(inputAtts).map(
   (att) => { return { "jsonPath": att } }
 );
 
-// detector model
+// iot events detector model
 const detectorModelRoleName = 'sample_task_detector_model_role';
-const detectorModelRoleArn = `arn:aws:iam::${AWS_ACCOUNT_ID}:role/${detectorModelRoleName}`;
 const detectorModelName = 'sample_task_detector_model';
 const detectorModelDefinition = {
   states: [
@@ -91,18 +88,32 @@ const detectorModelDefinition = {
   initialStateName: "todo",
 };
 
+// iam policy document for detector model
+const detectorModelPolicyDocument = new iam.PolicyDocument({
+  statements: [
+    new iam.PolicyStatement({
+      actions: ['iotevents:*'],
+      resources: ['*'],
+    }),
+    new iam.PolicyStatement({
+      actions: ['lambda:InvokeFunction'],
+      resources: ['*'],
+    }),
+  ],
+});
 
+///* 諸々の定義ここまで * ///
 
 export class IotEventsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // AWS IoT Events Input
-    const iotEventsInput = new iotevents.CfnInput(this, inputName, {
-      inputName: inputName,
-      inputDescription: 'sample input from cdk',
-      inputDefinition: {
-        attributes: inputAttribute
+    // IAM Role for AWS IoT Events Detector Model
+    const detectorModelRole = new iam.Role(this, detectorModelRoleName, {
+      roleName: detectorModelRoleName,
+      assumedBy: new iam.ServicePrincipal('iotevents.amazonaws.com'),
+      inlinePolicies: {
+        'detectorModelRoleNamePolicy': detectorModelPolicyDocument
       },
     });
 
@@ -111,9 +122,18 @@ export class IotEventsStack extends cdk.Stack {
       detectorModelName: detectorModelName,
       detectorModelDescription: 'sample detector model from cdk',
       evaluationMethod: "SERIAL",
-      key: 'sample_task.id',
+      key: `${inputAtts.id}`,
       detectorModelDefinition: detectorModelDefinition,
-      roleArn: detectorModelRoleArn,
+      roleArn: detectorModelRole.roleArn,
+    });
+
+    // AWS IoT Events Input
+    const iotEventsInput = new iotevents.CfnInput(this, inputName, {
+      inputName: inputName,
+      inputDescription: 'sample input from cdk',
+      inputDefinition: {
+        attributes: inputAttributeProperties
+      },
     });
   }
 }
