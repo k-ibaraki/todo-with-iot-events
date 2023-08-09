@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as iotevents from 'aws-cdk-lib/aws-iotevents';
+import * as iot from 'aws-cdk-lib/aws-iot';
 import * as iam from 'aws-cdk-lib/aws-iam';
 
 // dotenv
@@ -88,20 +89,10 @@ const detectorModelDefinition = {
   initialStateName: "todo",
 };
 
-// iam policy document for detector model
-const detectorModelPolicyDocument = new iam.PolicyDocument({
-  statements: [
-    new iam.PolicyStatement({
-      actions: ['iotevents:*'],
-      resources: ['*'],
-    }),
-    new iam.PolicyStatement({
-      actions: ['lambda:InvokeFunction'],
-      resources: ['*'],
-    }),
-  ],
-});
-
+// iot rule
+const iotRuleName = 'sample_task_iot_events_rule';
+const iotRuleTopic = 'sample/iot_events/task';
+const iotRuleRoleName = 'sample_task_iot_events_rule_role';
 ///* 諸々の定義ここまで * ///
 
 export class IotEventsStack extends cdk.Stack {
@@ -113,7 +104,18 @@ export class IotEventsStack extends cdk.Stack {
       roleName: detectorModelRoleName,
       assumedBy: new iam.ServicePrincipal('iotevents.amazonaws.com'),
       inlinePolicies: {
-        'detectorModelRoleNamePolicy': detectorModelPolicyDocument
+        detectorModelPolicy: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              actions: ['iotevents:*'],
+              resources: ['*'],
+            }),
+            new iam.PolicyStatement({
+              actions: ['lambda:InvokeFunction'],
+              resources: ['*'],
+            }),
+          ],
+        }),
       },
     });
 
@@ -135,6 +137,39 @@ export class IotEventsStack extends cdk.Stack {
         attributes: inputAttributeProperties
       },
     });
+
+    // IAM Role for AWS IoT Rule 
+    const iotRuleRole = new iam.Role(this, iotRuleRoleName, {
+      roleName: iotRuleRoleName,
+      assumedBy: new iam.ServicePrincipal('iot.amazonaws.com'),
+      inlinePolicies: {
+        iotRuleRolePolicy: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              actions: ['iotevents:BatchPutMessage'],
+              resources: ['*'],
+            }),
+          ],
+        }),
+      },
+    });
+
+    // AWS IoT Rule
+    const iotRule = new iot.CfnTopicRule(this, iotRuleName, {
+      ruleName: iotRuleName,
+
+      topicRulePayload: {
+        sql: `SELECT * FROM '${iotRuleTopic}'`,
+        description: "sample rule from cdk",
+        actions: [
+          {
+            iotEvents: {
+              inputName: iotEventsInput.inputName ?? '',
+              roleArn: iotRuleRole.roleArn,
+            },
+          },
+        ],
+      },
+    });
   }
 }
-
