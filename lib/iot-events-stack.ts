@@ -99,6 +99,15 @@ export class IotEventsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // AWS IoT Events Input
+    const iotEventsInput = new iotevents.CfnInput(this, inputName, {
+      inputName: inputName,
+      inputDescription: 'sample input from cdk',
+      inputDefinition: {
+        attributes: inputAttributeProperties
+      },
+    });
+
     // IAM Role for AWS IoT Events Detector Model
     const detectorModelRole = new iam.Role(this, detectorModelRoleName, {
       roleName: detectorModelRoleName,
@@ -127,15 +136,6 @@ export class IotEventsStack extends cdk.Stack {
       key: `${inputAtts.id}`,
       detectorModelDefinition: detectorModelDefinition,
       roleArn: detectorModelRole.roleArn,
-    });
-
-    // AWS IoT Events Input
-    const iotEventsInput = new iotevents.CfnInput(this, inputName, {
-      inputName: inputName,
-      inputDescription: 'sample input from cdk',
-      inputDefinition: {
-        attributes: inputAttributeProperties
-      },
     });
 
     // IAM Role for AWS IoT Rule 
